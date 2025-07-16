@@ -64,3 +64,29 @@ The fix is ready for Railway deployment. Bootstrap-Flask will be automatically i
 4. **Maintenance**: Bootstrap-Flask is actively maintained while Flask-Bootstrap is deprecated
 
 This fix ensures your Manufacturing Workload Management App will deploy successfully on Railway! 🏭 
+
+## 🔥 Additional Fix: Bootstrap4 Deprecation Warning
+
+### Issue
+During app startup, encountered warning:
+```
+UserWarning: For Bootstrap 4, please import and use "Bootstrap4" class, the "Bootstrap" class is deprecated and will be removed in 3.0.
+```
+
+### Root Cause
+The `Bootstrap` class is deprecated in favor of `Bootstrap4` for Bootstrap 4 compatibility.
+
+### ✅ Solution Applied
+**Updated app/__init__.py**:
+```diff
+- from flask_bootstrap import Bootstrap
++ from flask_bootstrap import Bootstrap4
+
+- bootstrap = Bootstrap()
++ bootstrap = Bootstrap4()
+```
+
+### Result
+✅ **RESOLVED** - Deprecation warning eliminated, app uses proper Bootstrap4 class.
+
+**Status**: All Bootstrap-Flask issues are now resolved! The app should start cleanly without any warnings. 🎉

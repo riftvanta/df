@@ -3,14 +3,14 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFProtect
-from flask_bootstrap import Bootstrap
+from flask_bootstrap import Bootstrap4
 import os
 
 db = SQLAlchemy()
 login_manager = LoginManager()
 migrate = Migrate()
 csrf = CSRFProtect()
-bootstrap = Bootstrap()
+bootstrap = Bootstrap4()
 
 def create_app():
     app = Flask(__name__)
