@@ -13,6 +13,66 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app import create_app, db
 from app.models import User, Project, Assignment, SkillsMatrix, Vacation
+from flask_migrate import upgrade, init, migrate, stamp
+from sqlalchemy import text
+
+def add_missing_columns():
+    """Add missing columns to existing tables"""
+    try:
+        # Commit any pending transactions and start fresh
+        db.session.commit()
+        
+        # Check if is_active column exists in users table
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'is_active'
+        """))
+        
+        if not result.fetchone():
+            print("📝 Adding missing is_active column to users table...")
+            db.session.execute(text("""
+                ALTER TABLE users 
+                ADD COLUMN is_active BOOLEAN DEFAULT TRUE NOT NULL
+            """))
+            db.session.commit()
+            print("✅ Added is_active column")
+        
+        # Check if last_login column exists
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'last_login'
+        """))
+        
+        if not result.fetchone():
+            print("📝 Adding missing last_login column to users table...")
+            db.session.execute(text("""
+                ALTER TABLE users 
+                ADD COLUMN last_login TIMESTAMP
+            """))
+            db.session.commit()
+            print("✅ Added last_login column")
+        
+        # Check if updated_at column exists
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'updated_at'
+        """))
+        
+        if not result.fetchone():
+            print("📝 Adding missing updated_at column to users table...")
+            db.session.execute(text("""
+                ALTER TABLE users 
+                ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            """))
+            db.session.commit()
+            print("✅ Added updated_at column")
+            
+    except Exception as e:
+        print(f"⚠️  Error adding missing columns: {e}")
+        db.session.rollback()
 
 def init_railway_database():
     """Initialize the Railway PostgreSQL database with schema and seed data"""
@@ -22,9 +82,45 @@ def init_railway_database():
     with app.app_context():
         print("🚀 Initializing Railway PostgreSQL database...")
         
-        # Create all tables
-        db.create_all()
-        print("✅ Database tables created")
+        # Try to upgrade database using migrations
+        migration_success = False
+        try:
+            print("📦 Applying database migrations...")
+            upgrade()
+            print("✅ Database migrations applied successfully")
+            migration_success = True
+        except Exception as e:
+            print(f"⚠️  Migration failed: {e}")
+            migration_success = False
+        
+        # If migration failed, try alternative approaches
+        if not migration_success:
+            print("📦 Creating database tables from scratch...")
+            try:
+                db.create_all()
+                print("✅ Database tables created")
+            except Exception as create_error:
+                print(f"⚠️  Create tables failed: {create_error}")
+                # Tables might already exist, continue to column addition
+            
+            # Mark the database as up to date with the current migration
+            try:
+                stamp()
+                print("✅ Database marked as up to date with current migration")
+            except Exception as stamp_error:
+                print(f"⚠️  Could not stamp database: {stamp_error}")
+        
+        # Always try to add missing columns (this handles partial migrations)
+        print("📝 Checking for missing columns...")
+        add_missing_columns()
+        
+        # Test if we can now query the User model
+        try:
+            User.query.count()
+            print("✅ User model query test passed")
+        except Exception as query_error:
+            print(f"❌ User model query failed: {query_error}")
+            return
         
         # Check if admin user already exists
         admin = User.query.filter_by(username='admin').first()
@@ -39,7 +135,8 @@ def init_railway_database():
             role='admin',
             department_id=1,
             team_id=1,
-            hours_per_week=40.0
+            hours_per_week=40.0,
+            is_active=True
         )
         admin.set_password('admin123')
         db.session.add(admin)
@@ -76,7 +173,8 @@ def init_railway_database():
                 role='employee',
                 department_id=emp_data['dept_id'],
                 team_id=emp_data['team_id'],
-                hours_per_week=40.0
+                hours_per_week=40.0,
+                is_active=True
             )
             employee.set_password('employee123')
             employees.append(employee)
