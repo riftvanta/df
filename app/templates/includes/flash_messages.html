@@ -12,7 +12,9 @@
                     <i class="fas fa-info-circle"></i>
                 {% endif %}
                 {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
             </div>
         {% endfor %}
     {% endif %}

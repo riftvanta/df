@@ -1,25 +1,21 @@
 // Manufacturing Workload Manager - Main JavaScript
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Bootstrap components
+    initializeBootstrapComponents();
+    
     // Initialize tooltips
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl)
-    });
+    $('[data-toggle="tooltip"]').tooltip();
 
     // Initialize popovers
-    var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'))
-    var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
-        return new bootstrap.Popover(popoverTriggerEl)
-    });
+    $('[data-toggle="popover"]').popover();
 
     // Auto-dismiss alerts after 5 seconds
     setTimeout(function() {
         var alerts = document.querySelectorAll('.alert');
         alerts.forEach(function(alert) {
             if (alert.classList.contains('alert-success') || alert.classList.contains('alert-info')) {
-                var bsAlert = new bootstrap.Alert(alert);
-                bsAlert.close();
+                $(alert).alert('close');
             }
         });
     }, 5000);
@@ -155,6 +151,20 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Real-time updates would be implemented here');
     };
 });
+
+// Initialize Bootstrap components
+function initializeBootstrapComponents() {
+    // Initialize dropdowns
+    $('.dropdown-toggle').dropdown();
+
+    // Initialize collapse components
+    $('.collapse').collapse({
+        toggle: false
+    });
+
+    // Initialize modals
+    $('.modal').modal();
+}
 
 // Utility functions
 function getCookie(name) {

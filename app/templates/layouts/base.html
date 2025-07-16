@@ -3,9 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Manufacturing Workload Manager{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
     {{ bootstrap.load_css() }}
+    
+    <!-- FontAwesome CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
     {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -16,8 +25,12 @@
         {% block content %}{% endblock %}
     </main>
     
+    <!-- Bootstrap JavaScript -->
     {{ bootstrap.load_js() }}
+    
+    <!-- Custom JavaScript -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    
     {% block extra_js %}{% endblock %}
 </body>
 </html> 
