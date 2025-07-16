@@ -134,6 +134,34 @@ def add_missing_columns():
             """))
             db.session.commit()
             print("✅ Added updated_at column")
+        
+        # Check and add missing columns to assignments table
+        print("📝 Checking assignments table columns...")
+        # Check if original_hours column exists in assignments table
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'assignments' AND column_name = 'original_hours'
+        """))
+        
+        if not result.fetchone():
+            print("📝 Adding missing original_hours column to assignments table...")
+            db.session.execute(text("""
+                ALTER TABLE assignments 
+                ADD COLUMN original_hours FLOAT NOT NULL DEFAULT 0.0
+            """))
+            db.session.commit()
+            print("✅ Added original_hours column")
+            
+            # Update existing assignments to have original_hours = hours_remaining
+            print("📝 Updating existing assignments with original_hours values...")
+            db.session.execute(text("""
+                UPDATE assignments 
+                SET original_hours = hours_remaining 
+                WHERE original_hours = 0.0
+            """))
+            db.session.commit()
+            print("✅ Updated existing assignments with original_hours")
             
     except Exception as e:
         print(f"⚠️  Error adding missing columns: {e}")
