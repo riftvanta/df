@@ -226,6 +226,138 @@ def add_missing_columns():
                 
                 db.session.commit()
                 print(f"✅ Added missing column: {column}")
+        
+        # Check and add missing columns to skills_matrix table
+        print("📝 Checking skills_matrix table columns...")
+        
+        # Check if years_experience column exists in skills_matrix table
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'skills_matrix' AND column_name = 'years_experience'
+        """))
+        
+        if not result.fetchone():
+            print("📝 Adding missing years_experience column to skills_matrix table...")
+            db.session.execute(text("""
+                ALTER TABLE skills_matrix 
+                ADD COLUMN years_experience INTEGER NOT NULL DEFAULT 0
+            """))
+            db.session.commit()
+            print("✅ Added years_experience column")
+        
+        # Check if last_updated column exists in skills_matrix table
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'skills_matrix' AND column_name = 'last_updated'
+        """))
+        
+        if not result.fetchone():
+            print("📝 Adding missing last_updated column to skills_matrix table...")
+            db.session.execute(text("""
+                ALTER TABLE skills_matrix 
+                ADD COLUMN last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            """))
+            db.session.commit()
+            print("✅ Added last_updated column")
+        
+        # Check for any other missing columns in skills_matrix table
+        expected_skills_columns = [
+            'id', 'user_id', 'machine_type', 'skill_level', 'efficiency_factor', 
+            'years_experience', 'last_updated'
+        ]
+        
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'skills_matrix'
+            ORDER BY column_name
+        """))
+        
+        existing_skills_columns = [row[0] for row in result.fetchall()]
+        missing_skills_columns = set(expected_skills_columns) - set(existing_skills_columns)
+        
+        if missing_skills_columns:
+            print(f"⚠️  Missing columns in skills_matrix table: {missing_skills_columns}")
+            # Add any other missing columns with appropriate defaults
+            for column in missing_skills_columns:
+                if column == 'efficiency_factor':
+                    db.session.execute(text(f"""
+                        ALTER TABLE skills_matrix 
+                        ADD COLUMN {column} FLOAT DEFAULT 1.0 NOT NULL
+                    """))
+                elif column in ['machine_type', 'skill_level']:
+                    default_value = "'primary'" if column == 'skill_level' else "'PAH'"
+                    db.session.execute(text(f"""
+                        ALTER TABLE skills_matrix 
+                        ADD COLUMN {column} VARCHAR(20) DEFAULT {default_value} NOT NULL
+                    """))
+                elif column == 'user_id':
+                    db.session.execute(text(f"""
+                        ALTER TABLE skills_matrix 
+                        ADD COLUMN {column} INTEGER NOT NULL DEFAULT 1
+                    """))
+                
+                db.session.commit()
+                print(f"✅ Added missing column: {column}")
+            
+        # Check and add missing columns to vacations table
+        print("📝 Checking vacations table columns...")
+        
+        # Check for missing columns in vacations table
+        expected_vacation_columns = [
+            'id', 'user_id', 'start_date', 'end_date', 'approved', 
+            'vacation_type', 'approved_by', 'created_at'
+        ]
+        
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'vacations'
+            ORDER BY column_name
+        """))
+        
+        existing_vacation_columns = [row[0] for row in result.fetchall()]
+        missing_vacation_columns = set(expected_vacation_columns) - set(existing_vacation_columns)
+        
+        if missing_vacation_columns:
+            print(f"⚠️  Missing columns in vacations table: {missing_vacation_columns}")
+            # Add any missing columns with appropriate defaults
+            for column in missing_vacation_columns:
+                if column == 'approved':
+                    db.session.execute(text(f"""
+                        ALTER TABLE vacations 
+                        ADD COLUMN {column} BOOLEAN DEFAULT FALSE NOT NULL
+                    """))
+                elif column in ['start_date', 'end_date']:
+                    db.session.execute(text(f"""
+                        ALTER TABLE vacations 
+                        ADD COLUMN {column} DATE NOT NULL DEFAULT CURRENT_DATE
+                    """))
+                elif column == 'created_at':
+                    db.session.execute(text(f"""
+                        ALTER TABLE vacations 
+                        ADD COLUMN {column} TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                    """))
+                elif column in ['vacation_type']:
+                    db.session.execute(text(f"""
+                        ALTER TABLE vacations 
+                        ADD COLUMN {column} VARCHAR(50) DEFAULT 'vacation' NOT NULL
+                    """))
+                elif column in ['approved_by']:
+                    db.session.execute(text(f"""
+                        ALTER TABLE vacations 
+                        ADD COLUMN {column} INTEGER
+                    """))
+                elif column == 'user_id':
+                    db.session.execute(text(f"""
+                        ALTER TABLE vacations 
+                        ADD COLUMN {column} INTEGER NOT NULL DEFAULT 1
+                    """))
+                
+                db.session.commit()
+                print(f"✅ Added missing column: {column}")
             
     except Exception as e:
         print(f"⚠️  Error adding missing columns: {e}")
@@ -291,11 +423,17 @@ def init_railway_database():
         
         for model_name, model_class in models_to_test:
             try:
+                # Start fresh transaction for each model test
+                db.session.rollback()
                 model_class.query.count()
                 print(f"✅ {model_name} model query test passed")
             except Exception as query_error:
                 print(f"❌ {model_name} model query failed: {query_error}")
+                db.session.rollback()  # Rollback failed transaction
                 # Don't return here, continue with other models
+        
+        # Fresh transaction for admin user check
+        db.session.rollback()
         
         # Check if admin user already exists
         try:
@@ -306,6 +444,7 @@ def init_railway_database():
                 return True
         except Exception as admin_check_error:
             print(f"⚠️  Could not check for admin user: {admin_check_error}")
+            db.session.rollback()
         
         # Create admin user
         try:
@@ -320,9 +459,11 @@ def init_railway_database():
             )
             admin.set_password('admin123')
             db.session.add(admin)
+            db.session.commit()
             print("✅ Admin user created")
         except Exception as admin_error:
             print(f"⚠️  Could not create admin user: {admin_error}")
+            db.session.rollback()
         
         # Create sample employees
         sample_employees = [
@@ -372,24 +513,24 @@ def init_railway_database():
         # Create skills matrix
         skills_data = [
             # PAH team skills
-            {'username': 'john_pah', 'machine_type': 'PAH', 'skill_level': 'primary', 'efficiency': 1.2},
-            {'username': 'mary_pah', 'machine_type': 'PAH', 'skill_level': 'primary', 'efficiency': 1.1},
+            {'username': 'john_pah', 'machine_type': 'PAH', 'skill_level': 'primary', 'efficiency': 1.2, 'years_experience': 5},
+            {'username': 'mary_pah', 'machine_type': 'PAH', 'skill_level': 'primary', 'efficiency': 1.1, 'years_experience': 3},
             
             # PPH USA team skills
-            {'username': 'bob_pph_usa', 'machine_type': 'PPH', 'skill_level': 'primary', 'efficiency': 1.0},
-            {'username': 'alice_pph_usa', 'machine_type': 'PPH', 'skill_level': 'primary', 'efficiency': 1.15},
+            {'username': 'bob_pph_usa', 'machine_type': 'PPH', 'skill_level': 'primary', 'efficiency': 1.0, 'years_experience': 2},
+            {'username': 'alice_pph_usa', 'machine_type': 'PPH', 'skill_level': 'primary', 'efficiency': 1.15, 'years_experience': 4},
             
             # PPH International team skills
-            {'username': 'charlie_pph_intl', 'machine_type': 'PPH', 'skill_level': 'primary', 'efficiency': 1.1},
-            {'username': 'diana_pph_intl', 'machine_type': 'PPH', 'skill_level': 'primary', 'efficiency': 1.0},
+            {'username': 'charlie_pph_intl', 'machine_type': 'PPH', 'skill_level': 'primary', 'efficiency': 1.1, 'years_experience': 6},
+            {'username': 'diana_pph_intl', 'machine_type': 'PPH', 'skill_level': 'primary', 'efficiency': 1.0, 'years_experience': 1},
             
             # REF USA team skills
-            {'username': 'eve_ref_usa', 'machine_type': 'REF', 'skill_level': 'primary', 'efficiency': 1.0},
-            {'username': 'frank_ref_usa', 'machine_type': 'REF', 'skill_level': 'primary', 'efficiency': 1.05},
+            {'username': 'eve_ref_usa', 'machine_type': 'REF', 'skill_level': 'primary', 'efficiency': 1.0, 'years_experience': 7},
+            {'username': 'frank_ref_usa', 'machine_type': 'REF', 'skill_level': 'primary', 'efficiency': 1.05, 'years_experience': 9},
             
             # REF International team skills
-            {'username': 'grace_ref_intl', 'machine_type': 'REF', 'skill_level': 'primary', 'efficiency': 1.1},
-            {'username': 'henry_ref_intl', 'machine_type': 'REF', 'skill_level': 'primary', 'efficiency': 1.0},
+            {'username': 'grace_ref_intl', 'machine_type': 'REF', 'skill_level': 'primary', 'efficiency': 1.1, 'years_experience': 4},
+            {'username': 'henry_ref_intl', 'machine_type': 'REF', 'skill_level': 'primary', 'efficiency': 1.0, 'years_experience': 2},
         ]
         
         try:
@@ -400,7 +541,8 @@ def init_railway_database():
                         user_id=user.id,
                         machine_type=skill_data['machine_type'],
                         skill_level=skill_data['skill_level'],
-                        efficiency_factor=skill_data['efficiency']
+                        efficiency_factor=skill_data['efficiency'],
+                        years_experience=skill_data.get('years_experience', 0)  # Default to 0 if not provided
                     )
                     db.session.add(skill)
             
