@@ -22,6 +22,8 @@ def add_missing_columns():
         # Commit any pending transactions and start fresh
         db.session.commit()
         
+        # Check and add missing columns to users table
+        print("📝 Checking users table columns...")
         # Check if is_active column exists in users table
         result = db.session.execute(text("""
             SELECT column_name 
@@ -65,6 +67,69 @@ def add_missing_columns():
             print("📝 Adding missing updated_at column to users table...")
             db.session.execute(text("""
                 ALTER TABLE users 
+                ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            """))
+            db.session.commit()
+            print("✅ Added updated_at column")
+        
+        # Check and add missing columns to projects table
+        print("📝 Checking projects table columns...")
+        # Check if priority column exists in projects table
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'projects' AND column_name = 'priority'
+        """))
+        
+        if not result.fetchone():
+            print("📝 Adding missing priority column to projects table...")
+            db.session.execute(text("""
+                ALTER TABLE projects 
+                ADD COLUMN priority VARCHAR(20) DEFAULT 'normal' NOT NULL
+            """))
+            db.session.commit()
+            print("✅ Added priority column")
+            
+            # Add the constraint for priority column
+            try:
+                db.session.execute(text("""
+                    ALTER TABLE projects 
+                    ADD CONSTRAINT valid_priority 
+                    CHECK (priority IN ('urgent', 'high', 'normal', 'low'))
+                """))
+                db.session.commit()
+                print("✅ Added priority constraint")
+            except Exception as constraint_error:
+                print(f"⚠️  Priority constraint may already exist: {constraint_error}")
+                db.session.rollback()
+        
+        # Check if created_at column exists in projects table
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'projects' AND column_name = 'created_at'
+        """))
+        
+        if not result.fetchone():
+            print("📝 Adding missing created_at column to projects table...")
+            db.session.execute(text("""
+                ALTER TABLE projects 
+                ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            """))
+            db.session.commit()
+            print("✅ Added created_at column")
+        
+        # Check if updated_at column exists in projects table
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'projects' AND column_name = 'updated_at'
+        """))
+        
+        if not result.fetchone():
+            print("📝 Adding missing updated_at column to projects table...")
+            db.session.execute(text("""
+                ALTER TABLE projects 
                 ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
             """))
             db.session.commit()
@@ -114,12 +179,19 @@ def init_railway_database():
         print("📝 Checking for missing columns...")
         add_missing_columns()
         
-        # Test if we can now query the User model
+        # Test if we can now query the models
         try:
             User.query.count()
             print("✅ User model query test passed")
         except Exception as query_error:
             print(f"❌ User model query failed: {query_error}")
+            return
+        
+        try:
+            Project.query.count()
+            print("✅ Project model query test passed")
+        except Exception as query_error:
+            print(f"❌ Project model query failed: {query_error}")
             return
         
         # Check if admin user already exists
