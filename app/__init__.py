@@ -92,9 +92,8 @@ def create_app(config_name=None):
     def health_check():
         return {'status': 'healthy', 'app': 'Manufacturing Workload Manager'}, 200
     
-    # Database initialization check for Railway
-    @app.before_first_request
-    def init_database():
+    # Database initialization check for Railway (run once during app creation)
+    def init_database_check():
         """Initialize database schema if running on Railway"""
         if os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('DATABASE_URL'):
             try:
@@ -117,6 +116,10 @@ def create_app(config_name=None):
             except Exception as init_error:
                 print(f"⚠️  Database initialization check failed: {init_error}")
                 # Don't crash the app, just log the error
+    
+    # Run database check during app creation (Flask 2.3+ compatible)
+    with app.app_context():
+        init_database_check()
     
     return app
 
