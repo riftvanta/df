@@ -33,61 +33,15 @@ def create_app():
     login_manager.login_message = 'Please log in to access this page.'
     
     # Register blueprints
-    from app.routes import auth
+    from app.routes import auth, admin, employee, api
     app.register_blueprint(auth.bp)
+    app.register_blueprint(admin.bp)
+    app.register_blueprint(employee.bp)
+    app.register_blueprint(api.bp)
     
     # Add root route
     @app.route('/')
     def index():
         return auth.index()
-    
-    # Placeholder routes for admin and employee (will be implemented in Phase 4)
-    from flask import Blueprint, render_template_string, redirect, url_for
-    from flask_login import login_required, current_user
-    
-    admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
-    employee_bp = Blueprint('employee', __name__, url_prefix='/employee')
-    
-    @admin_bp.route('/dashboard')
-    @login_required
-    def dashboard():
-        if not current_user.is_admin:
-            return redirect(url_for('employee.dashboard'))
-        return render_template_string('''
-            <h1>Admin Dashboard</h1>
-            <p>Welcome, {{ current_user.username }}!</p>
-            <p>This is a placeholder for the admin dashboard.</p>
-            <a href="{{ url_for('auth.logout') }}" class="btn btn-danger">Logout</a>
-        ''')
-    
-    @admin_bp.route('/projects')
-    @login_required
-    def projects():
-        return render_template_string('<h1>Projects (Coming Soon)</h1>')
-    
-    @admin_bp.route('/employees')
-    @login_required
-    def employees():
-        return render_template_string('<h1>Employees (Coming Soon)</h1>')
-    
-    @admin_bp.route('/reports')
-    @login_required 
-    def reports():
-        return render_template_string('<h1>Reports (Coming Soon)</h1>')
-    
-    @employee_bp.route('/dashboard') 
-    @login_required
-    def dashboard():
-        if current_user.is_admin:
-            return redirect(url_for('admin.dashboard'))
-        return render_template_string('''
-            <h1>Employee Dashboard</h1>
-            <p>Welcome, {{ current_user.username }}!</p>
-            <p>This is a placeholder for the employee dashboard.</p>
-            <a href="{{ url_for('auth.logout') }}" class="btn btn-danger">Logout</a>
-        ''')
-    
-    app.register_blueprint(admin_bp)
-    app.register_blueprint(employee_bp)
     
     return app 

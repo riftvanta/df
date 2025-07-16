@@ -1,0 +1,247 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Assign Project - {{ project.project_number }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>Assign Project</h1>
+                <a href="{{ url_for('admin.projects') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Projects
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Project Details</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless">
+                        <tr>
+                            <td><strong>Project Number:</strong></td>
+                            <td>{{ project.project_number }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Model Type:</strong></td>
+                            <td>{{ project.model_type }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Customer Country:</strong></td>
+                            <td>{{ project.customer_country }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Difficulty Level:</strong></td>
+                            <td>{{ project.difficulty_level }}/5</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Estimated Hours:</strong></td>
+                            <td>{{ project.estimated_hours }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Assembly Start Date:</strong></td>
+                            <td>{{ project.assembly_start_date.strftime('%Y-%m-%d') }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Deadline:</strong></td>
+                            <td>{{ project.deadline.strftime('%Y-%m-%d') }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Requires REF First:</strong></td>
+                            <td>{{ 'Yes' if project.requires_ref_first else 'No' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Assignment</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin.assign_project_submit') }}">
+                        <input type="hidden" name="project_id" value="{{ project.id }}">
+                        
+                        <div class="mb-3">
+                            <label for="employee_id" class="form-label">Select Employee:</label>
+                            <select class="form-select" id="employee_id" name="employee_id" required>
+                                <option value="">Choose an employee...</option>
+                                {% for employee_info in suitable_employees %}
+                                    {% set employee = employee_info.employee %}
+                                    <option value="{{ employee.id }}" 
+                                            data-skill-level="{{ employee_info.skill_level }}"
+                                            data-current-workload="{{ employee_info.current_workload }}"
+                                            data-available-hours="{{ employee_info.available_hours }}"
+                                            data-efficiency="{{ employee_info.efficiency_factor }}">
+                                        {{ employee.username }} - Team {{ employee.team_id }}
+                                        ({{ employee_info.skill_level }} - {{ employee_info.available_hours|round(1) }}h available)
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="alert alert-info">
+                                <strong>Assignment Logic:</strong>
+                                <ul class="mb-0">
+                                    <li>Primary skill employees are preferred</li>
+                                    <li>Geography constraints are applied</li>
+                                    <li>Current workload is considered</li>
+                                    <li>Employees on vacation are excluded</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-user-plus"></i> Assign Project
+                            </button>
+                            <button type="button" class="btn btn-success" onclick="autoAssign()">
+                                <i class="fas fa-magic"></i> Auto-Assign Best Match
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Suitable Employees</h5>
+                </div>
+                <div class="card-body">
+                    {% if suitable_employees %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Employee</th>
+                                    <th>Team</th>
+                                    <th>Skill Level</th>
+                                    <th>Efficiency</th>
+                                    <th>Current Workload</th>
+                                    <th>Available Hours</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for employee_info in suitable_employees %}
+                                    {% set employee = employee_info.employee %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ employee.username }}</strong>
+                                            <br>
+                                            <small class="text-muted">{{ employee.email }}</small>
+                                        </td>
+                                        <td>Team {{ employee.team_id }}</td>
+                                        <td>
+                                            <span class="badge {{ 'bg-success' if employee_info.skill_level == 'primary' else 'bg-warning' }}">
+                                                {{ employee_info.skill_level }}
+                                            </span>
+                                        </td>
+                                        <td>{{ employee_info.efficiency_factor }}x</td>
+                                        <td>{{ employee_info.current_workload|round(1) }}h</td>
+                                        <td>{{ employee_info.available_hours|round(1) }}h</td>
+                                        <td>
+                                            {% if employee_info.is_on_vacation %}
+                                                <span class="badge bg-warning">On Vacation</span>
+                                            {% elif employee_info.available_hours <= 0 %}
+                                                <span class="badge bg-danger">Overloaded</span>
+                                            {% elif employee_info.available_hours < 5 %}
+                                                <span class="badge bg-warning">Busy</span>
+                                            {% else %}
+                                                <span class="badge bg-success">Available</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if not employee_info.is_on_vacation %}
+                                                <button class="btn btn-sm btn-primary" 
+                                                        onclick="assignToEmployee({{ employee.id }}, '{{ employee.username }}')">
+                                                    Assign
+                                                </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <strong>No suitable employees found!</strong>
+                        <p>This might be because:</p>
+                        <ul>
+                            <li>No employees have the required skills for {{ project.model_type }}</li>
+                            <li>All skilled employees are on vacation</li>
+                            <li>Geography constraints prevent assignment</li>
+                        </ul>
+                        <p>Consider reassigning skills or checking vacation schedules.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function assignToEmployee(employeeId, employeeName) {
+    if (confirm(`Assign this project to ${employeeName}?`)) {
+        document.getElementById('employee_id').value = employeeId;
+        document.forms[0].submit();
+    }
+}
+
+function autoAssign() {
+    if (confirm('Auto-assign this project to the best available employee?')) {
+        fetch(`/api/auto-assign-project/{{ project.id }}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Project assigned to ${data.assigned_to} (${data.skill_level} skill level)`);
+                window.location.href = "{{ url_for('admin.projects') }}";
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error assigning project');
+        });
+    }
+}
+
+// Show employee details on selection
+document.getElementById('employee_id').addEventListener('change', function() {
+    const option = this.options[this.selectedIndex];
+    if (option.value) {
+        const skillLevel = option.getAttribute('data-skill-level');
+        const workload = option.getAttribute('data-current-workload');
+        const available = option.getAttribute('data-available-hours');
+        const efficiency = option.getAttribute('data-efficiency');
+        
+        console.log(`Selected: ${option.text}`);
+        console.log(`Skill: ${skillLevel}, Workload: ${workload}h, Available: ${available}h, Efficiency: ${efficiency}x`);
+    }
+});
+</script>
+{% endblock %} 

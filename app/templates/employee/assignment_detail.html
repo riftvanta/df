@@ -1,0 +1,255 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Assignment Details - {{ project.project_number }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>Assignment Details</h1>
+                <a href="{{ url_for('employee.dashboard') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5>{{ project.project_number }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Project Details</h6>
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td><strong>Model Type:</strong></td>
+                                    <td>{{ project.model_type }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Customer Country:</strong></td>
+                                    <td>{{ project.customer_country }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Difficulty Level:</strong></td>
+                                    <td>{{ project.difficulty_level }}/5</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Assembly Start Date:</strong></td>
+                                    <td>{{ project.assembly_start_date.strftime('%Y-%m-%d') }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Deadline:</strong></td>
+                                    <td>{{ project.deadline.strftime('%Y-%m-%d') }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Requires REF First:</strong></td>
+                                    <td>{{ 'Yes' if project.requires_ref_first else 'No' }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Time Tracking</h6>
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td><strong>Estimated Hours:</strong></td>
+                                    <td>{{ project.estimated_hours }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Hours Remaining:</strong></td>
+                                    <td>{{ assignment.hours_remaining|round(1) }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Time Spent:</strong></td>
+                                    <td>{{ time_spent|round(1) }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Progress:</strong></td>
+                                    <td>
+                                        {% set progress = (time_spent / project.estimated_hours) * 100 if project.estimated_hours > 0 else 0 %}
+                                        <div class="progress">
+                                            <div class="progress-bar" role="progressbar" style="width: {{ progress }}%">
+                                                {{ progress|round(1) }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <h6>Assignment Status</h6>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="badge 
+                                    {% if assignment.status == 'completed' %}bg-success
+                                    {% elif assignment.status == 'in_progress' %}bg-primary
+                                    {% elif assignment.status == 'on_hold' %}bg-warning
+                                    {% else %}bg-secondary{% endif %} fs-6">
+                                    {{ assignment.status.replace('_', ' ').title() }}
+                                </span>
+                                <small class="text-muted">
+                                    Last updated: {{ assignment.last_status_change.strftime('%Y-%m-%d %H:%M') }}
+                                </small>
+                            </div>
+                            
+                            {% if assignment.status == 'on_hold' and assignment.hold_reason %}
+                            <div class="alert alert-warning">
+                                <strong>Hold Reason:</strong> {{ assignment.hold_reason }}
+                            </div>
+                            {% endif %}
+                            
+                            <div class="d-flex gap-2">
+                                {% if assignment.status == 'not_started' %}
+                                    <form method="POST" action="{{ url_for('employee.update_status', assignment_id=assignment.id) }}" class="d-inline">
+                                        <input type="hidden" name="status" value="in_progress">
+                                        <button type="submit" class="btn btn-success">Start Work</button>
+                                    </form>
+                                {% elif assignment.status == 'in_progress' %}
+                                    <button class="btn btn-warning" onclick="showHoldModal()">Put on Hold</button>
+                                    <form method="POST" action="{{ url_for('employee.update_status', assignment_id=assignment.id) }}" class="d-inline">
+                                        <input type="hidden" name="status" value="completed">
+                                        <button type="submit" class="btn btn-success" onclick="return confirm('Mark this project as completed?')">
+                                            Mark Complete
+                                        </button>
+                                    </form>
+                                {% elif assignment.status == 'on_hold' %}
+                                    <form method="POST" action="{{ url_for('employee.update_status', assignment_id=assignment.id) }}" class="d-inline">
+                                        <input type="hidden" name="status" value="in_progress">
+                                        <button type="submit" class="btn btn-primary">Resume Work</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6>Update Hours</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="hoursRemaining" class="form-label">Hours Remaining:</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="hoursRemaining" 
+                                   step="0.5" min="0" value="{{ assignment.hours_remaining|round(1) }}">
+                            <button class="btn btn-primary" onclick="updateHours()">Update</button>
+                        </div>
+                    </div>
+                    <small class="text-muted">
+                        Enter the number of hours you estimate are remaining for this project.
+                    </small>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6>Timeline</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled">
+                        <li class="mb-2">
+                            <i class="fas fa-calendar-plus text-primary"></i>
+                            <strong>Assigned:</strong> {{ assignment.assigned_at.strftime('%Y-%m-%d %H:%M') }}
+                        </li>
+                        {% if assignment.started_at %}
+                        <li class="mb-2">
+                            <i class="fas fa-play text-success"></i>
+                            <strong>Started:</strong> {{ assignment.started_at.strftime('%Y-%m-%d %H:%M') }}
+                        </li>
+                        {% endif %}
+                        {% if assignment.completed_at %}
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success"></i>
+                            <strong>Completed:</strong> {{ assignment.completed_at.strftime('%Y-%m-%d %H:%M') }}
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hold Modal -->
+<div class="modal fade" id="holdModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Put Project on Hold</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('employee.update_status', assignment_id=assignment.id) }}">
+                <div class="modal-body">
+                    <input type="hidden" name="status" value="on_hold">
+                    <div class="mb-3">
+                        <label for="holdReason" class="form-label">Reason for hold:</label>
+                        <select class="form-select" id="holdReason" name="hold_reason" required>
+                            <option value="">Select a reason...</option>
+                            <option value="Waiting for REF team feedback">Waiting for REF team feedback</option>
+                            <option value="Waiting for electrical team feedback">Waiting for electrical team feedback</option>
+                            <option value="Moving to work on urgent project">Moving to work on urgent project</option>
+                            <option value="Waiting for parts/materials">Waiting for parts/materials</option>
+                            <option value="Technical issue needs resolution">Technical issue needs resolution</option>
+                            <option value="Waiting for customer clarification">Waiting for customer clarification</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Put on Hold</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateHours() {
+    const hoursInput = document.getElementById('hoursRemaining');
+    const hours = parseFloat(hoursInput.value);
+    
+    if (isNaN(hours) || hours < 0) {
+        alert('Please enter a valid number of hours');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('hours_remaining', hours);
+    
+    fetch(`/employee/update-hours/{{ assignment.id }}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Hours updated successfully!');
+            location.reload();
+        } else {
+            alert('Error updating hours: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error updating hours:', error);
+        alert('Error updating hours');
+    });
+}
+
+function showHoldModal() {
+    new bootstrap.Modal(document.getElementById('holdModal')).show();
+}
+</script>
+{% endblock %} 
