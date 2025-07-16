@@ -15,11 +15,13 @@ bootstrap = Bootstrap5()
 def create_app():
     app = Flask(__name__)
     
-    # Load configuration
-    if os.environ.get('RAILWAY_ENVIRONMENT'):
+    # Load configuration based on environment
+    if os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('DATABASE_URL'):
         app.config.from_object('config.ProductionConfig')
+        print("Loading ProductionConfig for Railway deployment")
     else:
         app.config.from_object('config.DevelopmentConfig')
+        print("Loading DevelopmentConfig for local development")
     
     # Initialize extensions
     db.init_app(app)
@@ -43,5 +45,10 @@ def create_app():
     @app.route('/')
     def index():
         return auth.index()
+    
+    # Health check endpoint for Railway
+    @app.route('/health')
+    def health_check():
+        return {'status': 'healthy', 'app': 'Manufacturing Workload Manager'}, 200
     
     return app 
