@@ -11,6 +11,7 @@ from flask_talisman import Talisman
 import os
 import logging
 from logging.handlers import RotatingFileHandler
+import sys
 
 # Initialize extensions
 db = SQLAlchemy()
@@ -90,6 +91,32 @@ def create_app(config_name=None):
     @app.route('/health')
     def health_check():
         return {'status': 'healthy', 'app': 'Manufacturing Workload Manager'}, 200
+    
+    # Database initialization check for Railway
+    @app.before_first_request
+    def init_database():
+        """Initialize database schema if running on Railway"""
+        if os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('DATABASE_URL'):
+            try:
+                from sqlalchemy import text
+                # Quick check if original_hours column exists
+                result = db.session.execute(text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'assignments' AND column_name = 'original_hours'
+                """))
+                
+                if not result.fetchone():
+                    print("⚠️  Database schema incomplete, running initialization...")
+                    import subprocess
+                    subprocess.run([sys.executable, 'railway_init.py'], check=True)
+                    print("✅ Database initialization completed via fallback")
+                else:
+                    print("✅ Database schema check passed")
+                    
+            except Exception as init_error:
+                print(f"⚠️  Database initialization check failed: {init_error}")
+                # Don't crash the app, just log the error
     
     return app
 

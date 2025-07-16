@@ -11,19 +11,41 @@ from datetime import datetime, date, timedelta
 # Add the current directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app import create_app, db
-from app.models import User, Project, Assignment, SkillsMatrix, Vacation
-from flask_migrate import upgrade, init, migrate, stamp
-from sqlalchemy import text
+def safe_database_operation(operation_name, operation_func):
+    """Safely execute database operations with error handling"""
+    try:
+        operation_func()
+        print(f"✅ {operation_name} completed successfully")
+        return True
+    except Exception as e:
+        print(f"⚠️  {operation_name} failed: {e}")
+        return False
 
 def add_missing_columns():
     """Add missing columns to existing tables"""
+    from app import create_app, db
+    from sqlalchemy import text
+    
     try:
         # Commit any pending transactions and start fresh
         db.session.commit()
         
+        # Check if tables exist first
+        tables_to_check = ['users', 'projects', 'assignments']
+        for table in tables_to_check:
+            result = db.session.execute(text(f"""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = '{table}'
+                )
+            """))
+            if not result.fetchone()[0]:
+                print(f"⚠️  Table '{table}' does not exist, skipping column checks")
+                continue
+        
         # Check and add missing columns to users table
         print("📝 Checking users table columns...")
+        
         # Check if is_active column exists in users table
         result = db.session.execute(text("""
             SELECT column_name 
@@ -74,6 +96,7 @@ def add_missing_columns():
         
         # Check and add missing columns to projects table
         print("📝 Checking projects table columns...")
+        
         # Check if priority column exists in projects table
         result = db.session.execute(text("""
             SELECT column_name 
@@ -137,6 +160,7 @@ def add_missing_columns():
         
         # Check and add missing columns to assignments table
         print("📝 Checking assignments table columns...")
+        
         # Check if original_hours column exists in assignments table
         result = db.session.execute(text("""
             SELECT column_name 
@@ -162,85 +186,143 @@ def add_missing_columns():
             """))
             db.session.commit()
             print("✅ Updated existing assignments with original_hours")
+        
+        # Check for any other missing columns in assignments table
+        expected_assignment_columns = [
+            'id', 'project_id', 'user_id', 'status', 'hours_remaining', 'original_hours',
+            'hold_reason', 'assigned_at', 'started_at', 'completed_at', 'last_status_change'
+        ]
+        
+        result = db.session.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'assignments'
+            ORDER BY column_name
+        """))
+        
+        existing_columns = [row[0] for row in result.fetchall()]
+        missing_columns = set(expected_assignment_columns) - set(existing_columns)
+        
+        if missing_columns:
+            print(f"⚠️  Missing columns in assignments table: {missing_columns}")
+            # Add any other missing columns with appropriate defaults
+            for column in missing_columns:
+                if column in ['hold_reason']:
+                    db.session.execute(text(f"""
+                        ALTER TABLE assignments 
+                        ADD COLUMN {column} VARCHAR(100)
+                    """))
+                elif column in ['assigned_at', 'started_at', 'completed_at', 'last_status_change']:
+                    default_value = "DEFAULT CURRENT_TIMESTAMP" if column in ['assigned_at', 'last_status_change'] else ""
+                    db.session.execute(text(f"""
+                        ALTER TABLE assignments 
+                        ADD COLUMN {column} TIMESTAMP {default_value}
+                    """))
+                elif column == 'status':
+                    db.session.execute(text(f"""
+                        ALTER TABLE assignments 
+                        ADD COLUMN {column} VARCHAR(20) DEFAULT 'not_started' NOT NULL
+                    """))
+                
+                db.session.commit()
+                print(f"✅ Added missing column: {column}")
             
     except Exception as e:
         print(f"⚠️  Error adding missing columns: {e}")
         db.session.rollback()
+        return False
+    
+    return True
 
 def init_railway_database():
     """Initialize the Railway PostgreSQL database with schema and seed data"""
+    
+    from app import create_app, db
+    from app.models import User, Project, Assignment, SkillsMatrix, Vacation
+    from flask_migrate import upgrade, init, migrate, stamp
+    from sqlalchemy import text
     
     app = create_app()
     
     with app.app_context():
         print("🚀 Initializing Railway PostgreSQL database...")
         
-        # Try to upgrade database using migrations
-        migration_success = False
+        # Test database connection
         try:
-            print("📦 Applying database migrations...")
-            upgrade()
-            print("✅ Database migrations applied successfully")
-            migration_success = True
-        except Exception as e:
-            print(f"⚠️  Migration failed: {e}")
-            migration_success = False
+            db.session.execute(text("SELECT 1"))
+            print("✅ Database connection successful")
+        except Exception as conn_error:
+            print(f"❌ Database connection failed: {conn_error}")
+            return False
+        
+        # Try to upgrade database using migrations
+        migration_success = safe_database_operation(
+            "Database migrations", 
+            lambda: upgrade()
+        )
         
         # If migration failed, try alternative approaches
         if not migration_success:
             print("📦 Creating database tables from scratch...")
-            try:
-                db.create_all()
-                print("✅ Database tables created")
-            except Exception as create_error:
-                print(f"⚠️  Create tables failed: {create_error}")
-                # Tables might already exist, continue to column addition
+            safe_database_operation(
+                "Database table creation",
+                lambda: db.create_all()
+            )
             
             # Mark the database as up to date with the current migration
-            try:
-                stamp()
-                print("✅ Database marked as up to date with current migration")
-            except Exception as stamp_error:
-                print(f"⚠️  Could not stamp database: {stamp_error}")
+            safe_database_operation(
+                "Database migration stamp",
+                lambda: stamp()
+            )
         
         # Always try to add missing columns (this handles partial migrations)
         print("📝 Checking for missing columns...")
-        add_missing_columns()
+        if not add_missing_columns():
+            print("⚠️  Some column additions failed, but continuing...")
         
         # Test if we can now query the models
-        try:
-            User.query.count()
-            print("✅ User model query test passed")
-        except Exception as query_error:
-            print(f"❌ User model query failed: {query_error}")
-            return
+        models_to_test = [
+            ("User", User),
+            ("Project", Project),
+            ("Assignment", Assignment),
+            ("SkillsMatrix", SkillsMatrix),
+            ("Vacation", Vacation)
+        ]
         
-        try:
-            Project.query.count()
-            print("✅ Project model query test passed")
-        except Exception as query_error:
-            print(f"❌ Project model query failed: {query_error}")
-            return
+        for model_name, model_class in models_to_test:
+            try:
+                model_class.query.count()
+                print(f"✅ {model_name} model query test passed")
+            except Exception as query_error:
+                print(f"❌ {model_name} model query failed: {query_error}")
+                # Don't return here, continue with other models
         
         # Check if admin user already exists
-        admin = User.query.filter_by(username='admin').first()
-        if admin:
-            print("⚠️  Admin user already exists, skipping seed data creation")
-            return
+        try:
+            admin = User.query.filter_by(username='admin').first()
+            if admin:
+                print("⚠️  Admin user already exists, skipping seed data creation")
+                print("🎉 Railway database initialization completed successfully!")
+                return True
+        except Exception as admin_check_error:
+            print(f"⚠️  Could not check for admin user: {admin_check_error}")
         
         # Create admin user
-        admin = User(
-            username='admin',
-            email='admin@manufacturing.com',
-            role='admin',
-            department_id=1,
-            team_id=1,
-            hours_per_week=40.0,
-            is_active=True
-        )
-        admin.set_password('admin123')
-        db.session.add(admin)
-        print("✅ Admin user created")
+        try:
+            admin = User(
+                username='admin',
+                email='admin@manufacturing.com',
+                role='admin',
+                department_id=1,
+                team_id=1,
+                hours_per_week=40.0,
+                is_active=True
+            )
+            admin.set_password('admin123')
+            db.session.add(admin)
+            print("✅ Admin user created")
+        except Exception as admin_error:
+            print(f"⚠️  Could not create admin user: {admin_error}")
         
         # Create sample employees
         sample_employees = [
@@ -265,23 +347,27 @@ def init_railway_database():
             {'username': 'henry_ref_intl', 'email': 'henry@manufacturing.com', 'team_id': 5, 'dept_id': 2},
         ]
         
-        employees = []
-        for emp_data in sample_employees:
-            employee = User(
-                username=emp_data['username'],
-                email=emp_data['email'],
-                role='employee',
-                department_id=emp_data['dept_id'],
-                team_id=emp_data['team_id'],
-                hours_per_week=40.0,
-                is_active=True
-            )
-            employee.set_password('employee123')
-            employees.append(employee)
-            db.session.add(employee)
-        
-        db.session.commit()
-        print(f"✅ {len(employees)} sample employees created")
+        try:
+            employees = []
+            for emp_data in sample_employees:
+                employee = User(
+                    username=emp_data['username'],
+                    email=emp_data['email'],
+                    role='employee',
+                    department_id=emp_data['dept_id'],
+                    team_id=emp_data['team_id'],
+                    hours_per_week=40.0,
+                    is_active=True
+                )
+                employee.set_password('employee123')
+                employees.append(employee)
+                db.session.add(employee)
+            
+            db.session.commit()
+            print(f"✅ {len(employees)} sample employees created")
+        except Exception as employee_error:
+            print(f"⚠️  Could not create sample employees: {employee_error}")
+            db.session.rollback()
         
         # Create skills matrix
         skills_data = [
@@ -306,19 +392,23 @@ def init_railway_database():
             {'username': 'henry_ref_intl', 'machine_type': 'REF', 'skill_level': 'primary', 'efficiency': 1.0},
         ]
         
-        for skill_data in skills_data:
-            user = User.query.filter_by(username=skill_data['username']).first()
-            if user:
-                skill = SkillsMatrix(
-                    user_id=user.id,
-                    machine_type=skill_data['machine_type'],
-                    skill_level=skill_data['skill_level'],
-                    efficiency_factor=skill_data['efficiency']
-                )
-                db.session.add(skill)
-        
-        db.session.commit()
-        print("✅ Skills matrix created")
+        try:
+            for skill_data in skills_data:
+                user = User.query.filter_by(username=skill_data['username']).first()
+                if user:
+                    skill = SkillsMatrix(
+                        user_id=user.id,
+                        machine_type=skill_data['machine_type'],
+                        skill_level=skill_data['skill_level'],
+                        efficiency_factor=skill_data['efficiency']
+                    )
+                    db.session.add(skill)
+            
+            db.session.commit()
+            print("✅ Skills matrix created")
+        except Exception as skills_error:
+            print(f"⚠️  Could not create skills matrix: {skills_error}")
+            db.session.rollback()
         
         # Create sample projects
         sample_projects = [
@@ -330,38 +420,49 @@ def init_railway_database():
             {'number': 'REF-2024-002', 'type': 'REF', 'country': 'Japan', 'hours': 85, 'difficulty': 3},
         ]
         
-        for proj_data in sample_projects:
-            # Calculate dates
-            start_date = date.today() + timedelta(days=7)
-            deadline = start_date + timedelta(days=21)  # 3 weeks later
+        try:
+            for proj_data in sample_projects:
+                # Calculate dates
+                start_date = date.today() + timedelta(days=7)
+                deadline = start_date + timedelta(days=21)  # 3 weeks later
+                
+                # Determine if REF is required first
+                requires_ref = (
+                    (proj_data['type'] == 'PPH' and proj_data['country'] == 'USA') or
+                    proj_data['type'] in ['APS', 'PSC']
+                )
+                
+                project = Project(
+                    project_number=proj_data['number'],
+                    model_type=proj_data['type'],
+                    customer_country=proj_data['country'],
+                    difficulty_level=proj_data['difficulty'],
+                    estimated_hours=proj_data['hours'],
+                    assembly_start_date=start_date,
+                    deadline=deadline,
+                    requires_ref_first=requires_ref,
+                    status='unassigned'
+                )
+                db.session.add(project)
             
-            # Determine if REF is required first
-            requires_ref = (
-                (proj_data['type'] == 'PPH' and proj_data['country'] == 'USA') or
-                proj_data['type'] in ['APS', 'PSC']
-            )
-            
-            project = Project(
-                project_number=proj_data['number'],
-                model_type=proj_data['type'],
-                customer_country=proj_data['country'],
-                difficulty_level=proj_data['difficulty'],
-                estimated_hours=proj_data['hours'],
-                assembly_start_date=start_date,
-                deadline=deadline,
-                requires_ref_first=requires_ref,
-                status='unassigned'
-            )
-            db.session.add(project)
-        
-        db.session.commit()
-        print("✅ Sample projects created")
+            db.session.commit()
+            print("✅ Sample projects created")
+        except Exception as project_error:
+            print(f"⚠️  Could not create sample projects: {project_error}")
+            db.session.rollback()
         
         print("🎉 Railway database initialization completed successfully!")
         print("\n📋 Login credentials:")
         print("   Admin: admin@manufacturing.com / admin123")
         print("   Employee: employee123 (for any employee account)")
         print("\n🔗 Your Railway app is ready to use!")
+        return True
 
 if __name__ == '__main__':
-    init_railway_database() 
+    success = init_railway_database()
+    if not success:
+        print("❌ Database initialization failed!")
+        sys.exit(1)
+    else:
+        print("✅ Database initialization completed successfully!")
+        sys.exit(0) 

@@ -1,7 +1,7 @@
 # nixpacks.toml
 
 [start]
-cmd = "gunicorn run:app"
+cmd = "./start.sh"
 
 [variables]
 PYTHONUNBUFFERED = "1" 
